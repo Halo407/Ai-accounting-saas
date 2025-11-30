@@ -1,1 +1,73 @@
-export async function POST(req) { return Response.json({ ok: true }); }
+// lib/groq.js
+import { Buffer } from 'buffer';
+
+const DEFAULT_GROQ_URL = 'https://api.groq.com/v1/engines/groq-1/completions';
+
+/**
+ * Calls the Groq LLM API with the provided prompt
+ * @param {string} prompt - The input prompt for the LLM
+ * @param {number} maxTokens - The maximum number of tokens to generate
+ * @returns {Promise<string>} - The generated text from the LLM
+ */
+export async function callGroqLLM(prompt, maxTokens) {
+  // Validate environment variables
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY environment variable is required');
+  }
+
+  // Use the provided URL or default
+  const apiUrl = process.env.GROQ_API_URL || DEFAULT_GROQ_URL;
+
+  // Prepare the request payload
+  const payload = {
+    prompt: prompt,
+    max_tokens: maxTokens,
+    temperature: 0.2,
+    stop: null
+  };
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'User-Agent': 'NextJS-Client/1.0'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    // Check if the response status indicates an error
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
+
+    // Parse the JSON response
+    const data = await response.json();
+
+    // Validate the response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response format from Groq API');
+    }
+
+    // Extract the text output from the response
+    if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
+      const choice = data.choices[0];
+      if (choice && typeof choice.text === 'string') {
+        return choice.text;
+      }
+    }
+
+    // Handle different response formats if needed
+    if (data.text) {
+      return data.text;
+    }
+
+    throw new Error('Unexpected response format from Groq API');
+  } catch (error) {
+    console.error('Error calling Groq API:', error);
+    throw error;
+  }
+}
