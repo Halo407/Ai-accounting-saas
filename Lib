@@ -1,73 +1,112 @@
-// lib/groq.js
-import { Buffer } from 'buffer';
-
-const DEFAULT_GROQ_URL = 'https://api.groq.com/v1/engines/groq-1/completions';
+// utils/getAiResponse.js
+const QWEN_API_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+const QWEN_MODEL = 'qwen-max';
+const REQUEST_TIMEOUT = 25000; // 25 seconds
 
 /**
- * Calls the Groq LLM API with the provided prompt
- * @param {string} prompt - The input prompt for the LLM
- * @param {number} maxTokens - The maximum number of tokens to generate
- * @returns {Promise<string>} - The generated text from the LLM
+ * Fetches a response from the Qwen API based on the provided prompt.
+ * @param {string} prompt - The input prompt for the AI model.
+ * @returns {Promise<{success: boolean, data?: string, error?: string}>} - Standardized response object.
  */
-export async function callGroqLLM(prompt, maxTokens) {
-  // Validate environment variables
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    throw new Error('GROQ_API_KEY environment variable is required');
+export async function getAiResponse(prompt) {
+  if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+    return {
+      success: false,
+      error: 'Invalid prompt: Prompt is required and must be a non-empty string.'
+    };
   }
 
-  // Use the provided URL or default
-  const apiUrl = process.env.GROQ_API_URL || DEFAULT_GROQ_URL;
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) {
+    return {
+      success: false,
+      error: 'Configuration error: QWEN_API_KEY environment variable is not set.'
+    };
+  }
 
-  // Prepare the request payload
-  const payload = {
-    prompt: prompt,
-    max_tokens: maxTokens,
-    temperature: 0.2,
-    stop: null
+  const requestBody = {
+    model: QWEN_MODEL,
+    input: {
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    },
+    parameters: {}
   };
 
   try {
-    const response = await fetch(apiUrl, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+    const response = await fetch(QWEN_API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'User-Agent': 'NextJS-Client/1.0'
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
 
-    // Check if the response status indicates an error
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      const errorBody = await response.text();
+      let errorMessage = `HTTP Error: ${response.status} - ${response.statusText}`;
+      if (errorBody) {
+        errorMessage += `. API Response: ${errorBody}`;
+      }
+      return {
+        success: false,
+        error: errorMessage
+      };
     }
 
-    // Parse the JSON response
     const data = await response.json();
 
-    // Validate the response structure
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid response format from Groq API');
-    }
-
-    // Extract the text output from the response
-    if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
-      const choice = data.choices[0];
-      if (choice && typeof choice.text === 'string') {
-        return choice.text;
+    // Attempt to extract the text output from the standard Qwen response structure
+    let aiOutputText = '';
+    if (data && data.output && data.output.choices && Array.isArray(data.output.choices) && data.output.choices.length > 0) {
+      const firstChoice = data.output.choices[0];
+      if (firstChoice && typeof firstChoice.message === 'object' && firstChoice.message && typeof firstChoice.message.content === 'string') {
+        aiOutputText = firstChoice.message.content;
+      } else if (firstChoice && typeof firstChoice.text === 'string') {
+        // Fallback to .text if .message.content is not available
+        aiOutputText = firstChoice.text;
       }
     }
 
-    // Handle different response formats if needed
-    if (data.text) {
-      return data.text;
+    if (typeof aiOutputText !== 'string') {
+      return {
+        success: false,
+        error: 'Unexpected API response format: Could not extract text output.'
+      };
     }
 
-    throw new Error('Unexpected response format from Groq API');
-  } catch (error) {
-    console.error('Error calling Groq API:', error);
-    throw error;
+    return {
+      success: true,
+      data: aiOutputText.trim()
+    };
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'Request timeout: The API request took longer than 25 seconds.'
+      };
+    }
+    if (err instanceof SyntaxError) {
+      return {
+        success: false,
+        error: `JSON Parse Error: ${err.message}`
+      };
+    }
+    return {
+      success: false,
+      error: `Network or Internal Error: ${err.message}`
+    };
   }
 }
