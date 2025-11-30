@@ -110,3 +110,61 @@ export async function getAiResponse(prompt) {
     };
   }
 }
+export async function getAiResponse(userMessage) {
+  if (!userMessage || typeof userMessage !== 'string') {
+    throw new Error('User message is required and must be a string');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch('https://api.awanllm.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.QWEN_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'qwen2.5:latest',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are an AI Accounting assistant...' 
+          },
+          { 
+            role: 'user', 
+            content: userMessage 
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 512
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API request failed with status ${response.status}: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response format from API');
+    }
+
+    const aiResponse = data.choices[0].message.content;
+    return aiResponse.trim();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    
+    throw error;
+  }
+}
