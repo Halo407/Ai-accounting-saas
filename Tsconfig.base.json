@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@api/*": ["apps/api-server/src/*"],
+      "@web/*": ["apps/web-frontend/src/*"],
+      "@lib/*": ["libs/*"]
+    }
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
