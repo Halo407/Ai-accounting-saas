@@ -1,0 +1,22 @@
+{
+  "name": "ai-accounting-mono",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "pnpm --filter web-frontend dev",
+    "dev:api": "pnpm --filter api-server dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "build": "pnpm -w build",
+    "start:api": "pnpm --filter api-server start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
